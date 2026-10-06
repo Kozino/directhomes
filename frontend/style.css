@@ -1,0 +1,15 @@
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:#f6f7f9;color:#1b1f24}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 16px;background:#0b6b4f;color:#fff}
+header a{color:#fff;text-decoration:none;margin-left:14px}.logo{font-weight:700;margin:0!important}
+main{max-width:1000px;margin:0 auto;padding:16px}.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+input,select,textarea,button{font:inherit;padding:9px 10px;border:1px solid #c9ced6;border-radius:8px}input,select,textarea{flex:1;min-width:130px}
+button{background:#0b6b4f;color:#fff;border:0;cursor:pointer}button.g{background:#e8ebef;color:#1b1f24}button.r{background:#b3261e}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0002}.card img{width:100%;height:160px;object-fit:cover;border-radius:8px}
+.gal{display:flex;gap:8px;overflow-x:auto}.gal img{height:220px;border-radius:8px}
+.tag{display:inline-block;background:#e0f2ea;color:#0b6b4f;border-radius:99px;padding:1px 10px;font-size:13px}.muted{color:#68707c;font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}.stats div{background:#fff;border-radius:10px;padding:10px}.stats b{font-size:22px;display:block}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1b1f24;color:#fff;padding:10px 16px;border-radius:8px;display:none}
+.msg{padding:8px 12px;border-radius:10px;margin:6px 0;max-width:80%;background:#fff}.me{background:#d6efe4;margin-left:auto}
+footer{text-align:center;padding:24px;color:#68707c}footer a{color:inherit}.hero{background:#0b6b4f;color:#fff;border-radius:14px;padding:28px 18px;text-align:center}.hero input{max-width:420px}.tabs a{margin-right:12px}label{display:block;font-size:14px;color:#68707c;margin-top:6px}form.col{display:flex;flex-direction:column;gap:6px}
+dialog{border:0;border-radius:12px;padding:16px;width:min(92vw,420px)}dialog::backdrop{background:#0006}dialog .col{display:flex;flex-direction:column;gap:6px}

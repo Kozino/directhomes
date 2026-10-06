@@ -1,0 +1,678 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // used by migrations; Supabase session-pooler URL (port 5432)
+}
+
+// ───────── ENUMS ─────────
+enum Role {
+  ADMIN
+  OWNER
+  MANAGER
+  TENANT
+}
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+enum KycStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+enum PropertyKind {
+  HOUSE
+  BUILDING
+  ESTATE
+}
+enum PropertyStatus {
+  DRAFT
+  DOCS_UPLOADED
+  PENDING_REVIEW
+  NEEDS_CHANGES
+  REJECTED
+  VERIFIED
+  ACTIVE
+  EXPIRED
+}
+enum UnitStatus {
+  DRAFT
+  AVAILABLE
+  RESERVED
+  OCCUPIED
+  MAINTENANCE
+}
+enum DocStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+enum PaymentPurpose {
+  ONBOARDING_FEE
+  RENT
+  RENEWAL
+}
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+// Rent never passes through the platform: the tenant pays the owner/manager by bank transfer,
+// and the receiver confirms. The platform's only revenue is the landlord's yearly onboarding fee.
+enum TokenStatus {
+  REQUESTED
+  ACTIVE
+  PAYMENT_CLAIMED
+  PAID
+  DISPUTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+enum TokenKind {
+  NEW_TENANCY
+  RENEWAL
+}
+enum AccountStatus {
+  APPROVED
+  PENDING_REVIEW
+  REJECTED
+}
+enum ViewingStatus {
+  REQUESTED
+  CONFIRMED
+  RESCHEDULED
+  COMPLETED
+  CANCELLED
+}
+enum TicketStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+enum Urgency {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+enum PayDuration {
+  MONTHLY
+  QUARTERLY
+  BIANNUAL
+  ANNUAL
+}
+
+// ───────── USERS & VERIFICATION ─────────
+model User {
+  id            String     @id @default(cuid())
+  role          Role
+  email         String     @unique
+  phone         String     @unique
+  passwordHash  String
+  fullName      String
+  avatarUrl     String?
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false)
+  phoneVerified Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  kyc             KycRecord?
+  ownedProperties Property[]             @relation("OwnerProperties")
+  assignments     ManagerAssignment[]
+  authLetters     ManagerAuthorisation[]
+  enquiriesSent   Enquiry[]              @relation("TenantEnquiries")
+  tenancies       Tenancy[]
+  tickets         MaintenanceTicket[]
+  notifications   Notification[]
+  favourites      Favourite[]
+  reviews         Review[]
+  auditLogs       AuditLog[]
+  tokens          PaymentToken[]         @relation("TenantTokens")
+  receivingAccounts ReceivingAccount[]
+
+  @@index([role, status])
+}
+
+model KycRecord {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id])
+  idType          String
+  idNumberHash    String    @unique
+  idDocumentUrl   String
+  selfieUrl       String
+  apiVerified     Boolean   @default(false)
+  bankAccountName String?
+  status          KycStatus @default(PENDING)
+  rejectReason    String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+model Blacklist {
+  id        String   @id @default(cuid())
+  type      String
+  valueHash String
+  reason    String
+  addedById String
+  createdAt DateTime @default(now())
+
+  @@unique([type, valueHash])
+}
+
+// ───────── ADMIN-MANAGED REFERENCE DATA ─────────
+model Location {
+  id         String     @id @default(cuid())
+  name       String
+  level      String
+  parentId   String?
+  parent     Location?  @relation("LocTree", fields: [parentId], references: [id])
+  children   Location[] @relation("LocTree")
+  active     Boolean    @default(true)
+  properties Property[]
+
+  @@unique([name, parentId])
+  @@index([level, parentId])
+}
+
+model UnitType {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  active Boolean @default(true)
+  units  Unit[]
+}
+
+model Feature {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  category String?
+  icon     String?
+  active   Boolean @default(true)
+  units    Unit[]  @relation("UnitFeatures")
+}
+
+// ───────── PROPERTY & YEARLY ONBOARDING FEE ─────────
+model OnboardingFeeTier {
+  id          String               @id @default(cuid())
+  name        String
+  kind        PropertyKind
+  minUnits    Int                  @default(1)
+  maxUnits    Int?
+  amountKobo  Int
+  active      Boolean              @default(true)
+  onboardings PropertyOnboarding[]
+}
+
+model Property {
+  id          String         @id @default(cuid())
+  kind        PropertyKind
+  name        String
+  address     String
+  latitude    Float?
+  longitude   Float?
+  locationId  String
+  location    Location       @relation(fields: [locationId], references: [id])
+  ownerId     String
+  owner       User           @relation("OwnerProperties", fields: [ownerId], references: [id])
+  parentId    String?
+  parent      Property?      @relation("Estate", fields: [parentId], references: [id])
+  children    Property[]     @relation("Estate")
+  status      PropertyStatus @default(DRAFT)
+  declaredUnits Int          @default(1)
+  estateName  String?
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  units         Unit[]
+  documents     PropertyDocument[]
+  onboardings   PropertyOnboarding[]
+  managers      ManagerAssignment[]
+  authLetters   ManagerAuthorisation[]
+  announcements Announcement[]
+
+  @@index([status, locationId])
+}
+
+model PropertyOnboarding {
+  id            String            @id @default(cuid())
+  propertyId    String
+  property      Property          @relation(fields: [propertyId], references: [id])
+  tierId        String
+  tier          OnboardingFeeTier @relation(fields: [tierId], references: [id])
+  transactionId String?           @unique
+  amountKobo    Int
+  paidAt        DateTime?
+  approvedAt    DateTime?
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  graceEndsAt   DateTime?
+  renewedFromId String?
+  refundStatus  String?
+  createdAt     DateTime          @default(now())
+
+  @@index([propertyId, expiresAt])
+}
+
+model PropertyDocument {
+  id           String    @id @default(cuid())
+  propertyId   String
+  property     Property  @relation(fields: [propertyId], references: [id])
+  docType      String
+  fileUrl      String
+  status       DocStatus @default(PENDING)
+  rejectReason String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model ManagerAssignment {
+  id             String   @id @default(cuid())
+  propertyId     String
+  property       Property @relation(fields: [propertyId], references: [id])
+  managerId      String
+  manager        User     @relation(fields: [managerId], references: [id])
+  canSetPrice    Boolean  @default(false)
+  canListUnits   Boolean  @default(true)
+  canViewPayouts Boolean  @default(false)
+  canApproveTokens   Boolean @default(false)
+  canReceivePayments Boolean @default(false)
+  active         Boolean  @default(true)
+
+  @@unique([propertyId, managerId])
+}
+
+model ManagerAuthorisation {
+  id          String    @id @default(cuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id])
+  managerId   String
+  manager     User      @relation(fields: [managerId], references: [id])
+  documentUrl String
+  status      DocStatus @default(PENDING)
+}
+
+model VerificationReview {
+  id            String   @id @default(cuid())
+  entityType    String
+  entityId      String
+  adminId       String
+  decision      String
+  checklistJson Json?
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+// ───────── UNITS ─────────
+model Unit {
+  id                String      @id @default(cuid())
+  propertyId        String
+  property          Property    @relation(fields: [propertyId], references: [id])
+  unitTypeId        String
+  unitType          UnitType    @relation(fields: [unitTypeId], references: [id])
+  title             String
+  description       String?
+  rentKobo          Int
+  cautionKobo       Int         @default(0)
+  serviceChargeKobo Int         @default(0)
+  payDuration       PayDuration @default(ANNUAL)
+  bedrooms          Int         @default(0)
+  bathrooms         Int         @default(0)
+  toilets           Int         @default(0)
+  furnished         Boolean     @default(false)
+  availableFrom     DateTime?
+  status            UnitStatus  @default(DRAFT)
+  flaggedAt         DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  features   Feature[]           @relation("UnitFeatures")
+  images     UnitImage[]
+  enquiries  Enquiry[]
+  viewings   Viewing[]
+  tokens     PaymentToken[]
+  tenancies  Tenancy[]
+  tickets    MaintenanceTicket[]
+  reviews    Review[]
+  favourites Favourite[]
+  reports    Report[]
+
+  @@index([status, propertyId])
+  @@index([rentKobo])
+}
+
+model UnitImage {
+  id        String  @id @default(cuid())
+  unitId    String
+  unit      Unit    @relation(fields: [unitId], references: [id])
+  url       String
+  sortOrder Int     @default(0)
+  isVideo   Boolean @default(false)
+}
+
+// ───────── ENQUIRY, CHAT, VIEWING ─────────
+model Enquiry {
+  id            String    @id @default(cuid())
+  unitId        String
+  unit          Unit      @relation(fields: [unitId], references: [id])
+  tenantId      String
+  tenant        User      @relation("TenantEnquiries", fields: [tenantId], references: [id])
+  contactShared Boolean   @default(false)
+  sharedById    String?
+  createdAt     DateTime  @default(now())
+  messages      Message[]
+
+  @@unique([unitId, tenantId])
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  enquiryId     String
+  enquiry       Enquiry  @relation(fields: [enquiryId], references: [id])
+  senderId      String
+  body          String
+  attachmentUrl String?
+  readAt        DateTime?
+  createdAt     DateTime @default(now())
+}
+
+model Viewing {
+  id         String        @id @default(cuid())
+  unitId     String
+  unit       Unit          @relation(fields: [unitId], references: [id])
+  tenantId   String
+  proposedAt DateTime
+  status     ViewingStatus @default(REQUESTED)
+  note       String?
+}
+
+// ───────── PAYMENTS, TOKEN, TENANCY ─────────
+// Bank account where a tenant pays rent directly (owner's, or a manager's if the owner allows it).
+// Account numbers are encrypted at rest; only the last 4 digits are shown in lists.
+model ReceivingAccount {
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  bankName         String
+  accountName      String
+  accountNumberEnc String
+  numberHash       String
+  last4            String
+  status           AccountStatus @default(PENDING_REVIEW)
+  isDefault        Boolean       @default(false)
+  active           Boolean       @default(true)
+  rejectReason     String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@index([userId, active])
+  @@index([numberHash])
+}
+
+// One token = one tenant's request to rent a unit (or renew a tenancy).
+// REQUESTED (tenant asks) -> ACTIVE (owner/manager approves; unit RESERVED; bank details shown)
+// -> PAYMENT_CLAIMED (tenant says "I have paid") -> PAID (receiver confirms; unit OCCUPIED; tenancy created)
+// Side exits: REJECTED, CANCELLED, EXPIRED (unit released), DISPUTED (admin mediates).
+model PaymentToken {
+  id                  String      @id @default(cuid())
+  code                String?     @unique
+  kind                TokenKind   @default(NEW_TENANCY)
+  unitId              String
+  unit                Unit        @relation(fields: [unitId], references: [id])
+  tenantId            String
+  tenant              User        @relation("TenantTokens", fields: [tenantId], references: [id])
+  tenancyId           String?
+  rentKobo            Int
+  cautionKobo         Int         @default(0)
+  serviceChargeKobo   Int         @default(0)
+  platformFeeKobo     Int         @default(0)
+  moveInDate          DateTime?
+  tenantNote          String?
+  status              TokenStatus @default(REQUESTED)
+  expiresAt           DateTime?
+  approvedById        String?
+  approvedAt          DateTime?
+  payToUserId         String?
+  payBankName         String?
+  payAccountName      String?
+  payAccountNumberEnc String?
+  rejectReason        String?
+  claimedAt           DateTime?
+  claimReference      String?
+  proofKey            String?
+  confirmedById       String?
+  confirmedAt         DateTime?
+  disputeReason       String?
+  disputedAt          DateTime?
+  resolvedNote        String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([tenantId, status])
+  @@index([unitId, status])
+}
+
+// Ledger of payments. ONBOARDING_FEE/renewal rows come from Paystack; RENT rows are bank transfers confirmed by the receiver.
+model Transaction {
+  id            String         @id @default(cuid())
+  userId        String
+  purpose       PaymentPurpose
+  reference     String         @unique
+  amountKobo    Int
+  status        PaymentStatus  @default(PENDING)
+  channel       String         @default("PAYSTACK")
+  tokenId       String?        @unique
+  propertyId    String?
+  confirmedById String?
+  rawWebhook    Json?
+  createdAt     DateTime       @default(now())
+
+  @@index([userId, status])
+}
+
+model Tenancy {
+  id                String      @id @default(cuid())
+  unitId            String
+  unit              Unit        @relation(fields: [unitId], references: [id])
+  tenantId          String
+  tenant            User        @relation(fields: [tenantId], references: [id])
+  tokenId           String?     @unique
+  rentKobo          Int         @default(0)
+  payDuration       PayDuration @default(ANNUAL)
+  startsAt          DateTime
+  endsAt            DateTime
+  renewedCount      Int         @default(0)
+  agreementUrl      String?
+  moveInConfirmedAt DateTime?
+  active            Boolean     @default(true)
+  endedAt           DateTime?
+  createdAt         DateTime    @default(now())
+
+  @@index([active, endsAt])
+}
+
+// ───────── MAINTENANCE ─────────
+model MaintenanceTicket {
+  id             String             @id @default(cuid())
+  unitId         String
+  unit           Unit               @relation(fields: [unitId], references: [id])
+  tenantId       String
+  tenant         User               @relation(fields: [tenantId], references: [id])
+  category       String
+  title          String
+  description    String
+  urgency        Urgency            @default(MEDIUM)
+  status         TicketStatus       @default(OPEN)
+  vendorId       String?
+  vendor         Vendor?            @relation(fields: [vendorId], references: [id])
+  estimateKobo   Int?
+  costKobo       Int?
+  escalated      Boolean            @default(false)
+  escalatedAt    DateTime?
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  reopenedCount  Int                @default(0)
+  slaStartAt     DateTime           @default(now())
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  comments       TicketComment[]
+  attachments    TicketAttachment[]
+
+  @@index([status, unitId])
+  @@index([tenantId])
+  @@index([escalated, status])
+}
+
+model TicketComment {
+  id        String            @id @default(cuid())
+  ticketId  String
+  ticket    MaintenanceTicket @relation(fields: [ticketId], references: [id])
+  authorId  String
+  body      String
+  internal  Boolean           @default(false)
+  createdAt DateTime          @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model TicketAttachment {
+  id           String            @id @default(cuid())
+  ticketId     String
+  ticket       MaintenanceTicket @relation(fields: [ticketId], references: [id])
+  fileKey      String
+  phase        String            @default("BEFORE")
+  uploadedById String
+  createdAt    DateTime          @default(now())
+}
+
+model Vendor {
+  id          String              @id @default(cuid())
+  ownerId     String
+  createdById String
+  name        String
+  trade       String
+  phone       String
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  tickets     MaintenanceTicket[]
+
+  @@index([ownerId, active])
+}
+
+// ───────── MISC ─────────
+model Review {
+  id            String    @id @default(cuid())
+  unitId        String
+  unit          Unit      @relation(fields: [unitId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  rating        Int
+  managerRating Int?
+  comment       String?
+  verifiedStay  Boolean   @default(false)
+  reply         String?
+  repliedAt     DateTime?
+  hidden        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, unitId])
+  @@index([unitId, hidden])
+}
+
+enum ReportStatus {
+  OPEN
+  DISMISSED
+  ACTIONED
+}
+model Report {
+  id           String       @id @default(cuid())
+  unitId       String
+  unit         Unit         @relation(fields: [unitId], references: [id])
+  reporterId   String
+  reason       String
+  details      String?
+  status       ReportStatus @default(OPEN)
+  resolvedById String?
+  resolvedAt   DateTime?
+  note         String?
+  createdAt    DateTime     @default(now())
+
+  @@unique([unitId, reporterId])
+  @@index([status, unitId])
+}
+
+model Favourite {
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id])
+
+  @@id([userId, unitId])
+}
+
+model Announcement {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+  authorId   String
+  title      String
+  body       String
+  createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
+model OtpCode {
+  id        String    @id @default(cuid())
+  userId    String
+  channel   String
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, channel, createdAt])
+}

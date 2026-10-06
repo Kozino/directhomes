@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: house-mgmt-api
+    runtime: node
+    rootDir: backend         # the API lives in /backend
+    plan: starter            # always-on; free instances sleep and stop the background jobs
+    numInstances: 1          # keep at 1: scheduled jobs run inside the web process
+    buildCommand: npm ci --include=dev && npm run build
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - { key: NODE_VERSION, value: "20" }
+      - { key: NODE_ENV, value: production }
+      - { key: REQUIRE_EMAIL_VERIFY, value: "false" }
+      - { key: JWT_ACCESS_SECRET, generateValue: true }
+      - { key: JWT_REFRESH_SECRET, generateValue: true }
+      - { key: HASH_PEPPER, generateValue: true }
+      - { key: DATA_ENC_KEY, sync: false }   # openssl rand -hex 32, and back it up
+      - { key: DATABASE_URL, sync: false }
+      - { key: DIRECT_URL, sync: false }
+      - { key: ADMIN_EMAIL, sync: false }
+      - { key: ADMIN_PASSWORD, sync: false }
+      - { key: APP_URL, sync: false }
+      - { key: WEB_ORIGIN, sync: false }
+      - { key: PAYSTACK_SECRET_KEY, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_SERVICE_KEY, sync: false }
+      - { key: TERMII_API_KEY, sync: false }
+      - { key: TERMII_SENDER_ID, sync: false }
+      - { key: RESEND_API_KEY, sync: false }
+      - { key: MAIL_FROM, sync: false }
