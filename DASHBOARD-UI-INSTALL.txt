@@ -1,0 +1,27 @@
+Direct Homes — role dashboards and brand UI refresh
+
+This is a frontend-only refresh for the Admin, Tenant (resident), Owner and Manager dashboards. It changes visual presentation, role-specific overview copy, and dashboard navigation styling. It does not change the API, database, authentication, permissions, workflows, or business rules.
+
+GUI install
+1. Extract the ZIP.
+2. Copy the included files into the same paths in your repository, replacing the matching frontend files. Preserve the folder structure, including `frontend/assets/`.
+3. Keep your existing `frontend/config.js`, `frontend/netlify.toml`, and all backend files unchanged. The existing app routes and form/action handlers remain in place.
+4. Commit and push the frontend changes to the branch connected to Netlify. Wait for the site redeploy, then sign in with each role to review its dashboard.
+
+Included changes
+- A generated Direct Homes emblem, used in the app header/sidebar, footer, and browser favicon. The transparent PNG is the full-resolution mark; the WebP is the optimized in-app version.
+- A rich forest-green/evergreen sidebar with warm brass accents, clear active states, and a matching mobile drawer.
+- Distinct Tenant, Owner and Manager dashboard hero sections and color-tinted KPI cards, while retaining existing summary data, actions and sections.
+- A redesigned Admin overview with colorful platform metrics, existing KYC/property review queues, and shortcuts to existing admin sections.
+- Responsive spacing and card layouts for desktop, tablet and mobile.
+
+Suggested real-estate palette
+- Deep forest: `#173F35` — trust, stability and the dashboard rail.
+- Evergreen shadow: `#0D302B` — depth and contrast.
+- Warm ivory: `#F8F7F1` — calm page canvas.
+- Soft sage: `#E4ECE3` — positive property and resident states.
+- Muted brass: `#C59A64` — premium highlights and selected navigation.
+- Pale blue, terracotta and lavender tints — distinguish dashboard metrics without using harsh, saturated colors.
+
+Functional scope
+Only `frontend/index.html`, `frontend/style.css`, `frontend/app.js`, `frontend/pages.js`, `frontend/admin.js`, `frontend/forms.js`, `frontend/ui.js`, and the three Direct Homes logo/favicon assets are included. Existing dashboard API calls, links, controls and form actions are preserved. No backend changes are included.
