@@ -2,59 +2,63 @@
 
 Landlords and managers list verified properties; tenants search, contact the owner, get a payment token and pay the owner's bank account directly. No agents, no viewing fees. Owners pay one yearly onboarding fee per property after verification. Maintenance, reviews, reports and analytics are included.
 
-```
-direct-homes/
-├── backend/          Node.js + Express + TypeScript + Prisma + PostgreSQL API
-│   ├── prisma/       schema.prisma, seed.ts, rls.sql
+```text
+directhomes/
+├── backend/          Node.js 22 + Express + TypeScript + Prisma + PostgreSQL API
+│   ├── prisma/       schema.prisma, migrations/, seed.ts, rls.sql
 │   ├── src/          routes/, lib/, jobs/, middleware/, server.ts
-│   ├── public/admin/ admin console (verification queue, fee tiers, users...)
 │   ├── tests/        end-to-end scripts (phase5, phase6)
-│   ├── Dockerfile, .env.example, README.md (full API reference)
+│   ├── .env.example  local configuration template
+│   └── Dockerfile
 ├── frontend/         static web app for tenants, owners, managers, admins (Netlify)
-├── render.yaml       Render blueprint for the API
-└── .github/workflows/ci.yml   type-check and build on every push
+├── render.yaml       Render Blueprint for the API
+└── .github/workflows/ci.yml and docker-image.yml
 ```
 
 ## Run locally
+
+Use Node.js 22+ and a **development** PostgreSQL database. Copy `backend/.env.example` to `backend/.env` and replace the placeholders; never commit `.env` or use production secrets in a development environment.
+
 ```bash
 cd backend
-cp .env.example .env            # set DATABASE_URL, DIRECT_URL, secrets, DATA_ENC_KEY
-npm install
-npx prisma migrate dev --name init
+npm ci
+npx prisma migrate dev
 npm run db:seed                 # admin user, unit types, features, fee tiers, Lagos
-npm run dev                     # http://localhost:4000/api/health, admin console at /admin/
+npm run dev                     # http://localhost:4000/api/health
 ```
-Admins sign in on the same login page as everyone else; the full admin area is in the web app under the Admin menu (`backend/public/admin/` is the older console and is no longer needed).
-Then serve `frontend/` (see `frontend/README.md`).
+
+Admins sign in on the same login page as everyone else; the admin area is in the web app under the Admin menu. Then serve `frontend/` (see `frontend/README.md`). If you do not use a terminal on your computer, GitHub Codespaces provides a browser-based development terminal.
 
 ## Deploy (Supabase + Render + Netlify)
-1. **Migrations first.** After `migrate dev`, commit `backend/prisma/migrations/`. Render runs `prisma migrate deploy` from it.
-2. **Supabase:** create a project. Buckets: `listing-photos` (public), `private-files` (private). Use the pooled URL (port 6543, `?pgbouncer=true&connection_limit=1`) as `DATABASE_URL` and the session-pooler URL (port 5432) as `DIRECT_URL`. After the first migration run `backend/prisma/rls.sql` in the SQL editor (again after migrations that add tables).
-3. **Render:** New > Blueprint, pick this repo (`render.yaml`, root directory `backend`). Fill in the secrets it asks for. Then in the Render shell run `npm run db:seed:prod` once.
-4. **Paystack** (yearly fee only): webhook `https://<render-host>/api/webhooks/paystack`.
-5. **Netlify:** see `frontend/README.md`. Set `WEB_ORIGIN` on Render to the Netlify URL.
 
-| Variable | Where | Notes |
+The repository includes a baseline migration for the current Prisma schema. **Keep `backend/prisma/migrations/` in Git**: Render applies it with `prisma migrate deploy` before starting the API.
+
+1. **Supabase:** create a project and Storage buckets `listing-photos` (public) and `private-files` (private). Use the Transaction pooler URL (port 6543, `pgbouncer=true&connection_limit=1`) for `DATABASE_URL`, and the Session pooler URL (port 5432) for `DIRECT_URL`. After the first migration, run `backend/prisma/rls.sql` in the Supabase SQL Editor; repeat after migrations add tables.
+2. **Render:** create a Blueprint from your fork of this repo and apply `render.yaml`. The API uses Node 22. Set the environment variables below. After the first successful deploy, run `npm run db:seed:prod` once in the Render Shell.
+3. **Netlify:** import your fork, set **Base directory** to `frontend`, leave the build command empty, and set the publish directory to `.`. Replace `YOUR-API` in `frontend/netlify.toml` with your Render hostname before deploying. Leave `frontend/config.js` unchanged; Netlify proxies `/api` and `/media` to Render.
+4. Set Render's `WEB_ORIGIN` to your Netlify site origin (no trailing slash). This controls CORS and is also the return URL for Paystack checkout.
+5. **Paystack** (yearly property onboarding fee only): set its webhook to `https://<render-host>/api/webhooks/paystack`. Tenant rent is paid directly to the owner/manager by bank transfer; it does not go through Paystack.
+
+| Variable | Where / value | Notes |
 |---|---|---|
-| DATABASE_URL, DIRECT_URL | Render | Supabase pooled / session-pooler URLs |
-| JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, HASH_PEPPER | Render | auto-generated by render.yaml |
-| DATA_ENC_KEY | Render | `openssl rand -hex 32`. Back it up: losing it makes saved bank accounts unreadable |
-| ADMIN_EMAIL, ADMIN_PASSWORD | Render | used by the seed |
-| WEB_ORIGIN, APP_URL | Render | Netlify URL, Render URL |
-| SUPABASE_URL, SUPABASE_SERVICE_KEY | Render | file storage |
-| PAYSTACK_SECRET_KEY | Render | yearly onboarding fee |
-| TERMII_API_KEY, TERMII_SENDER_ID | Render | SMS verification codes |
-| RESEND_API_KEY, MAIL_FROM | Render | email (later) |
-| REQUIRE_EMAIL_VERIFY | Render | `false` until you have a sending domain |
+| `DATABASE_URL` | Render: Supabase Transaction pooler | Port 6543; `pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | Render: Supabase Session pooler | Port 5432; Prisma migrations use this URL |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `HASH_PEPPER` | Render | Generated by `render.yaml` |
+| `DATA_ENC_KEY` | Render | Generate with `openssl rand -hex 32`; back it up—losing it makes saved bank accounts unreadable |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Render | Used by the one-time seed |
+| `WEB_ORIGIN` | Render | Netlify origin; comma-separate additional allowed origins |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Render | Keep the server-side key private; never put it in frontend code |
+| `PAYSTACK_SECRET_KEY` | Render | Required for yearly onboarding fee checkout |
+| `TERMII_API_KEY`, `TERMII_SENDER_ID` | Render | SMS verification; configure to deliver production phone OTPs |
+| `RESEND_API_KEY`, `MAIL_FROM` | Render | Optional email delivery |
+| `REQUIRE_EMAIL_VERIFY` | Render | Defaults to `false` in the Blueprint |
+
+The Render Blueprint uses the Starter plan because background jobs run inside the API process; sleeping/free instances can interrupt those jobs. Review Render pricing before applying it.
+
+### Future database changes
+
+In a development database, update `schema.prisma` using `npx prisma migrate dev --name <change_name>`, then commit the generated `backend/prisma/migrations/` files. Production applies committed migrations with `prisma migrate deploy`; do not use `migrate dev` against a live production database.
 
 ## Not done yet
-Email notifications, viewing reschedule screen, live chat, NDPA deletion requests, coupons, PDF exports. Have a Nigerian property lawyer review the agreement text (`backend/src/lib/pdf.ts`) and the terms page before launch.
 
-## Push to GitHub
-```bash
-cd direct-homes
-git init && git add . && git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/<you>/direct-homes.git
-git push -u origin main
-```
+Email notifications, viewing reschedule screen, live chat, NDPA deletion requests, coupons, and PDF exports. Have a Nigerian property lawyer review the agreement text (`backend/src/lib/pdf.ts`) and terms before launch. Seeded onboarding fee tiers are placeholders; review them in the admin area before enabling real payments.

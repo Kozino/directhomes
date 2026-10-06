@@ -10,7 +10,7 @@ services:
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
-      - { key: NODE_VERSION, value: "20" }
+      - { key: NODE_VERSION, value: "22" }
       - { key: NODE_ENV, value: production }
       - { key: REQUIRE_EMAIL_VERIFY, value: "false" }
       - { key: JWT_ACCESS_SECRET, generateValue: true }
@@ -21,7 +21,6 @@ services:
       - { key: DIRECT_URL, sync: false }
       - { key: ADMIN_EMAIL, sync: false }
       - { key: ADMIN_PASSWORD, sync: false }
-      - { key: APP_URL, sync: false }
       - { key: WEB_ORIGIN, sync: false }
       - { key: PAYSTACK_SECRET_KEY, sync: false }
       - { key: SUPABASE_URL, sync: false }

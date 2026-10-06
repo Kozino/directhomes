@@ -5,10 +5,13 @@ import { addMonths, graceEnd } from "./fees";
 export const paystackConfigured = () => !!process.env.PAYSTACK_SECRET_KEY;
 
 export async function initCheckout(email: string, amountKobo: number, reference: string, meta: object) {
+  // Paystack must return the user to the static frontend, not the API host. WEB_ORIGIN
+  // may list multiple allowed browser origins; use the primary one for the callback.
+  const callbackUrl = process.env.WEB_ORIGIN?.split(",")[0]?.trim();
   const r = await fetch("https://api.paystack.co/transaction/initialize", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ email, amount: amountKobo, reference, currency: "NGN", callback_url: `${process.env.APP_URL}/payment-complete`, metadata: meta }),
+    body: JSON.stringify({ email, amount: amountKobo, reference, currency: "NGN", ...(callbackUrl ? { callback_url: callbackUrl } : {}), metadata: meta }),
   });
   const d: any = await r.json();
   if (!r.ok || !d.status) throw new Error("Could not start payment");

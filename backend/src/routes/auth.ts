@@ -26,7 +26,7 @@ r.post("/register", async (req, res) => {
     data: { ...d, passwordHash: await bcrypt.hash(password, 12) },
     select: { id: true, role: true, fullName: true, email: true },
   });
-  // TODO Phase 2: send email/phone OTP
+  // Verification codes are requested explicitly from the app's Verify Phone screen.
   res.status(201).json({ user, accessToken: signAccess(user), refreshToken: signRefresh(user) });
 });
 

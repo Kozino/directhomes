@@ -1,13 +1,15 @@
-# House Management API – Phase 1
+# House Management API
 
-Stack: Node.js + Express + TypeScript + Prisma + PostgreSQL
+Stack: Node.js 22 + Express + TypeScript + Prisma + PostgreSQL.
+
+> The feature-phase notes below are a development history. Fresh installs use the committed baseline migration under `prisma/migrations/`; do not replay the old per-phase migration commands on top of it.
 
 ## Run
-1. `cp .env.example .env` and set DATABASE_URL, JWT secrets, admin email/password
-2. `npm install`
-3. `npx prisma migrate dev --name init`
-4. `npm run db:seed`   (creates admin, unit types, features, starter fee tiers, Lagos)
-5. `npm run dev`       (http://localhost:4000/api/health)
+1. `cp .env.example .env` and set the database URLs, JWT secrets, admin email/password, and `DATA_ENC_KEY`.
+2. Use a development PostgreSQL database (not production), then run `npm ci`.
+3. `npx prisma migrate dev` (applies the committed baseline to the development database).
+4. `npm run db:seed` (creates admin, unit types, features, starter fee tiers, Lagos).
+5. `npm run dev` (http://localhost:4000/api/health).
 
 ## Folder structure
 prisma/schema.prisma   full database (all phases)
@@ -148,13 +150,13 @@ Reports and analytics
 
 Not in Phase 6: PDF exports (CSV only), live push for notifications, email/SMS delivery of notifications (still in-app only), an admin screen for these tools, and unit tests of the ticket SLA clock beyond the e2e script.
 
-## Phase 7A (added): deployment readiness
-- Files now go to Supabase Storage when SUPABASE_URL + SUPABASE_SERVICE_KEY are set (src/lib/storage.ts); without them dev still uses local disk.
-- Fixed `npm start` (dist/src/server.js), added postinstall `prisma generate`, trust proxy, CORS via WEB_ORIGIN, directUrl for migrations.
-- OTP codes now sent by Termii (SMS) and Resend (email) when keys are set.
-- New: Dockerfile, render.yaml, prisma/rls.sql, `npm run db:seed:prod`.
-- BEFORE FIRST DEPLOY: create the migration history locally: `npx prisma migrate dev --name init` against an empty database, then COMMIT prisma/migrations.
+## Deployment setup
+- Files go to Supabase Storage when `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` are set; without them, development uses local disk.
+- The repository includes a baseline Prisma migration for the current schema. Render runs `prisma migrate deploy` before starting the API.
+- For later schema changes, use `npx prisma migrate dev --name <change_name>` against a development database and commit the generated `prisma/migrations/` directory. Do not run `migrate dev` against production.
+- OTP codes are delivered by Termii (SMS) and Resend (email) when configured. The Node API is configured for Node 22.
+- See the root README for the Supabase + Render + Netlify deployment steps.
 
 ## Phase 9 (added)
 GET /api/units/:id (staff edit data) | DELETE /api/units/:id (no history, not reserved/occupied) | PATCH /api/properties/:id (name/address only before review) | DELETE /api/properties/:id (only draft/rejected, no units).
-Not compiled here (Prisma client could not be generated in my sandbox): run `npx tsc --noEmit` after `npx prisma generate` and send me any errors.
+Run `npm ci`, `npx prisma generate`, and `npm run build` after changing dependencies or the Prisma schema.

@@ -80,6 +80,12 @@ async function notes() {
   api("dashboard/notifications/read", { body: {} }).catch(() => {});
 }
 
+function paymentComplete() {
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
+  const reference = params.get("reference") || params.get("trxref") || "";
+  app.innerHTML = `<div class="card"><h2>Payment return received</h2><p>We are waiting for the verified Paystack notification. Your property status updates only after the server confirms the payment.</p><p>Please do not pay again while it is processing. Refresh your dashboard shortly.</p>${reference ? `<p>Reference: <b>${esc(reference)}</b></p>` : ""}<a href="#/dash">Go to dashboard</a></div>`;
+}
+
 // ---------- actions ----------
 const need = () => (user() ? true : (say("Please sign in first"), (location.hash = "#/login"), false));
 const A = {
@@ -112,9 +118,14 @@ document.addEventListener("click", async (e) => {
   try { await A[b.dataset.a](b.dataset.id, b.dataset.x); if (/^#\/(dash|a\/|ticket\/)/.test(location.hash)) route(); } catch (x) { say(x.message); }
 });
 async function route() {
+  const returnedReference = new URLSearchParams(location.search).get("reference") || new URLSearchParams(location.search).get("trxref");
+  if (returnedReference && (!location.hash || location.hash === "#/")) {
+    location.hash = "#/payment-complete?reference=" + encodeURIComponent(returnedReference);
+    return;
+  }
   const h = location.hash.replace(/^#/, "") || "/", p = h.split("?")[0].split("/");
   nav();
-  try { if (p[1] === "unit") await unit(p[2]); else if (p[1] === "login") authForm(false); else if (p[1] === "register") authForm(true); else if (p[1] === "dash") await dash(); else if (p[1] === "chat") await chat(p[2]); else if (p[1] === "notes") await notes(); else if (p[1] === "search") await search(); else if (EXTRA[p[1]]) await EXTRA[p[1]](p[2], p[3]); else await EXTRA.home(); }
+  try { if (p[1] === "unit") await unit(p[2]); else if (p[1] === "login") authForm(false); else if (p[1] === "register") authForm(true); else if (p[1] === "dash") await dash(); else if (p[1] === "chat") await chat(p[2]); else if (p[1] === "notes") await notes(); else if (p[1] === "search") await search(); else if (p[1] === "payment-complete") paymentComplete(); else if (EXTRA[p[1]]) await EXTRA[p[1]](p[2], p[3]); else await EXTRA.home(); }
   catch (x) { app.innerHTML = `<p class="card">⚠️ ${esc(x.message)}</p>`; }
 }
 
