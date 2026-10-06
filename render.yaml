@@ -3,7 +3,7 @@ services:
     name: house-mgmt-api
     runtime: node
     rootDir: backend         # the API lives in /backend
-    plan: starter            # always-on; free instances sleep and stop the background jobs
+    plan: free            # always-on; free instances sleep and stop the background jobs
     numInstances: 1          # keep at 1: scheduled jobs run inside the web process
     buildCommand: npm ci --include=dev && npm run build
     preDeployCommand: npx prisma migrate deploy
